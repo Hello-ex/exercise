@@ -1,66 +1,84 @@
-/* 3. Style body */
+/* General Styles */
 body {
     font-family: Arial, sans-serif;
-    font-size: 16px;
-}
-
-/* 4. Style header */
-header {
-    background-color: #4CAF50;
-    padding: 20px;
-    text-align: center;
-}
-
-/* 5. Style nav */
-nav {
-    background-color: #333;
-    padding: 10px;
-}
-nav ul {
-    list-style-type: none;
     margin: 0;
     padding: 0;
-    text-align: center;
 }
-nav ul li {
-    display: inline;
+
+/* Skip to Main Content */
+.skip {
+    position: absolute;
+    top: -40px;
+    left: 0;
+    background: #000;
+    color: #fff;
+    padding: 10px;
+    z-index: 100;
+}
+
+.skip:focus {
+    top: 10px;
+}
+
+/* Navigation Bar */
+.nav-bar {
+    background: #333;
+    padding: 10px 0;
+}
+
+.nav-bar ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+}
+
+.nav-bar ul li {
     margin: 0 15px;
 }
-nav ul li a {
+
+.nav-bar ul li a {
     color: white;
     text-decoration: none;
-}
-
-/* 6. Style main */
-main {
-    background-color: #f4f4f4;
     font-size: 18px;
-    padding: 20px;
 }
 
-/* 7. Style footer */
-footer {
-    background-color: #222;
-    color: white;
-    text-align: center;
-    padding: 10px;
+.nav-bar ul li a:hover {
+    text-decoration: underline;
 }
 
-/* 8. Style li */
-li {
-    display: inline-block;
-    width: auto;
+/* Box Model for Images */
+img {
+    border: 2px solid #ccc;
     padding: 5px;
+    border-radius: 10px;
+    width: 100%;
+    max-width: 300px;
 }
 
-/* 9. Style h1 */
-h1 {
-    text-align: center;
-    font-family: 'Courier New', Courier, monospace;
-    color: #fff;
+/* Grid Layout for Gallery */
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    padding: 20px;
+    justify-content: center;
 }
 
-/* 10. Style p */
-p {
-    line-height: 1.5;
+/* Flexbox for Navigation */
+.nav-bar {
+    display: flex;
+    justify-content: center;
+}
+
+/* Hover Effects */
+img:hover {
+    transform: scale(1.05);
+    transition: 0.3s;
+}
+
+/* nth-child Selector */
+.gallery-grid img:nth-child(odd) {
+    border-radius: 20px;
 }
