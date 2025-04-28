@@ -1,0 +1,89 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+
+#define BUZZER_PIN 9
+#define SERVO_PIN 6
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+Servo myServo;
+
+String command = "";
+String payload = "";
+
+void setup() {
+  Serial.begin(9600);
+  lcd.init();
+  lcd.backlight();
+
+  pinMode(BUZZER_PIN, OUTPUT);
+  myServo.attach(SERVO_PIN);
+
+  lockDoor();
+  lcd.setCursor(0, 0);
+  lcd.print("Hello, welcome home <3");
+}
+
+void loop() {
+  if (Serial.available()) {
+    command = Serial.readStringUntil('\n');
+    command.trim();
+
+    if (command.startsWith("DISPLAY")) {
+      payload = command.substring(8); // Bỏ "DISPLAY " để lấy nội dung in
+      displayMessage(payload);
+      
+      // Xử lý các hành động theo nội dung (nếu cần)
+      if (payload == "Access Granted") {
+        buzzShort();
+        unlockDoor();
+        delay(5000);
+        lockDoor();
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Hello, welcome home <3");
+      } else if (payload == "Access Denied") {
+        buzzLong();
+        delay(1000);
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Hello, welcome home <3");
+      }
+    }
+  }
+}
+
+// Hàm in LCD
+void displayMessage(String msg) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  if (msg.length() <= 16) {
+    lcd.print(msg);
+  } else {
+    lcd.print(msg.substring(0, 16));
+    lcd.setCursor(0, 1);
+    lcd.print(msg.substring(16, 32)); // dòng 2
+  }
+}
+
+// Các hàm buzzer
+void buzzShort() {
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(100);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+void buzzLong() {
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(500);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+// Các hàm servo
+void lockDoor() {
+  myServo.write(0); // Góc 0 độ khóa cửa
+}
+
+void unlockDoor() {
+  myServo.write(90); // Góc 90 độ mở cửa
+}
