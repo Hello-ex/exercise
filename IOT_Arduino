@@ -1,0 +1,75 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+
+#define BUZZER_PIN 9
+#define SERVO_PIN 6
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+Servo myServo;
+
+String command = "";
+
+void setup() {
+  Serial.begin(9600); // UART nhận từ ESP8266
+  lcd.init();
+  lcd.backlight();
+  
+  pinMode(BUZZER_PIN, OUTPUT);
+  myServo.attach(SERVO_PIN);
+  
+  lockDoor();
+  lcd.setCursor(0, 0);
+  lcd.print("Waiting for RFID");
+}
+
+void loop() {
+  if (Serial.available()) {
+    command = Serial.readStringUntil('\n');
+    command.trim();
+
+    if (command == "UNLOCK") {
+      grantAccess();
+    } else if (command == "DENY") {
+      denyAccess();
+    }
+  }
+}
+
+void grantAccess() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Access Granted");
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(100);
+  digitalWrite(BUZZER_PIN, LOW);
+  unlockDoor();
+  delay(5000); // cửa mở 5 giây
+  lockDoor();
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Waiting for RFID");
+}
+
+void denyAccess() {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Access Denied");
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(500);
+  digitalWrite(BUZZER_PIN, LOW);
+  delay(500);
+  
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Waiting for RFID");
+}
+
+void lockDoor() {
+  myServo.write(0); // Góc 0 độ khóa cửa
+}
+
+void unlockDoor() {
+  myServo.write(90); // Góc 90 độ mở cửa
+}
