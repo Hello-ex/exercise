@@ -1,0 +1,290 @@
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Wire.h>
+#include <Keypad_I2C.h>
+#include <PCF8574.h>
+#include <SoftwareSerial.h>
+#include <Adafruit_Fingerprint.h>  // Thêm thư viện Adafruit_Fingerprint
+
+#define SS_PIN D8
+#define RST_PIN D0
+#define I2C_ADDR 0x20  // Địa chỉ I2C của PCF8574
+
+#define myRX D4   // TX của AS608 nối vào D4
+#define myTX D3   // RX của AS608 nối vào D3
+
+SoftwareSerial mySerial(myRX, myTX);  // Định nghĩa chân RX và TX cho giao tiếp SoftwareSerial
+Adafruit_Fingerprint finger(&mySerial);  // Đối tượng cảm biến vân tay
+
+// Cấu hình Keypad 4x4
+const byte ROW_NUM    = 4;    // Số hàng
+const byte COLUMN_NUM = 4;    // Số cột
+char keys[ROW_NUM][COLUMN_NUM] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+
+byte pin_rows[ROW_NUM] = {0, 1, 2, 3}; // Dòng của Keypad
+byte pin_column[COLUMN_NUM] = {4, 5, 6, 7}; // Cột của Keypad
+
+Keypad_I2C keypad(makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_NUM, I2C_ADDR);
+
+MFRC522 rfid(SS_PIN, RST_PIN);
+
+String allowedUID = "AC C9 37 02"; // UID hợp lệ
+String inputPassword = "";
+String storedPassword = "1234";  // Mật khẩu mặc định
+int starPressCount = 0;  // Đếm số lần ấn '*'
+
+void setup() {
+  Serial.begin(9600);
+  SPI.begin();
+  rfid.PCD_Init();
+  keypad.begin();  // Khởi tạo Keypad
+  
+  // Khởi tạo cảm biến vân tay
+  finger.begin(57600);  // Khởi động cảm biến vân tay với tốc độ 57600
+  delay(200);  // Đợi một chút để cảm biến vân tay khởi động
+
+  Wire.begin(D2, D1);  // I2C với ESP8266
+}
+
+void loop() {
+  //Kiểm tra RFID
+  checkRFID();
+
+  // Kiểm tra vân tay
+  checkFingerprint();  // Gọi hàm kiểm tra vân tay
+
+  // Xử lý nhập mật khẩu qua keypad
+  handleKeypad();
+}
+
+
+// Kiểm tra thẻ RFID
+void checkRFID() {
+  if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+    String content = "";
+    for (byte i = 0; i < rfid.uid.size; i++) {
+      content += String(rfid.uid.uidByte[i] < 0x10 ? "0" : "");
+      content += String(rfid.uid.uidByte[i], HEX);
+      content += " ";
+    }
+    content.trim();
+    content.toUpperCase();
+
+    if (content == allowedUID) {
+      Serial.println("DISPLAY Hello, ");  // Gửi lệnh mở cửa
+    } else {
+      Serial.println("DISPLAY Are you sure you own this house?");  // Gửi lệnh từ chối
+    }
+    rfid.PICC_HaltA();
+  }
+}
+
+//Kiểm tra keypad
+void handleKeypad() {
+  char key = keypad.getKey();
+  if (key) {
+    Serial.print("DISPLAY Key Pressed: ");
+    Serial.println(key);
+
+    if (key == 'A') {
+      starPressCount++;
+      if (starPressCount == 3) {
+        changePassword();  // Đổi mật khẩu nếu ấn 3 lần 'A'
+        starPressCount = 0;  // Reset sau khi đổi mật khẩu
+      }
+    } 
+    else if (key == 'C') {
+      checkPassword();  // Kiểm tra mật khẩu khi ấn 'C'
+    } 
+    else if (key == 'D') {
+      starPressCount++;  // Tăng số lần nhấn phím 'D'
+      Serial.print("DISPLAY Press count: ");
+      Serial.println(starPressCount);
+
+      if (starPressCount == 3) {
+        enrollFingerprint();  // Khi nhấn 3 lần 'D', bắt đầu enroll vân tay
+        starPressCount = 0;  // Reset sau khi enroll
+      }
+    }else if (key =='B'){
+       starPressCount++;  // Tăng số lần nhấn phím 'B'
+       Serial.print("DISPLAY Press count: ");
+       if (starPressCount == 3) {
+        deleteFingerprint();  // Khi nhấn 3 lần 'B', bắt đầu enroll vân tay
+        starPressCount = 0;  // Reset sau khi enroll
+      }
+    }
+    else {
+      inputPassword += key;  // Các phím khác thì cộng vào inputPassword
+    }
+  }
+}
+
+
+void checkFingerprint() {
+  uint8_t p = finger.getImage();  // Lấy ảnh vân tay
+  if (p != FINGERPRINT_OK) return;  // Nếu không có ảnh vân tay, thoát
+
+  p = finger.image2Tz();  // Chuyển ảnh thành mã vân tay
+  if (p != FINGERPRINT_OK) return;  // Nếu không thành công, thoát
+
+  p = finger.fingerSearch();  // Tìm kiếm vân tay trong cơ sở dữ liệu
+  if (p == FINGERPRINT_OK) {
+    Serial.println("UNLOCK");  // Nếu vân tay hợp lệ, mở cửa
+  } else {
+    Serial.println("DENY");  // Nếu vân tay không hợp lệ, từ chối
+  }
+}
+
+void checkPassword() {
+  if (inputPassword == storedPassword) {
+    Serial.println("DISPLAY ");  // Gửi lệnh mở cửa
+  } else {
+    Serial.println("DENY");  // Gửi lệnh từ chối
+  }
+  inputPassword = "";  // Reset mật khẩu nhập
+}
+
+void changePassword() {
+  Serial.println("DISPLAY Enter new password:");
+  String newPassword = "";
+
+  unsigned long timeout = millis(); // thêm timeout nếu người dùng không bấm gì
+  while (newPassword.length() < 4) {
+    char key = keypad.getKey();
+    if (key) {
+      newPassword += key;
+      Serial.print(key);
+      timeout = millis(); // reset timeout mỗi lần bấm
+    }
+
+    yield(); // cực kỳ quan trọng cho ESP8266
+    if (millis() - timeout > 10000) { // 10 giây không bấm thì hủy
+      Serial.println("\nTimeout. Password change canceled.");
+      starPressCount = 0;
+      return;
+    }
+  }
+
+  Serial.println("\nNew password set.");
+  storedPassword = newPassword;
+  starPressCount = 0;  // Reset đếm số lần ấn '*'
+}
+
+void enrollFingerprint() {
+  Serial.println("\n=== Enrolling Fingerprint ===");
+
+  // Random ID trong khoảng 1-127
+  uint8_t id;
+  bool idExists = true;
+
+  // Kiểm tra xem ID random đã tồn tại chưa
+  while (idExists) {
+    id = random(1, 128); // Random từ 1 đến 127
+    if (!finger.loadModel(id)) {
+      idExists = false; // Nếu loadModel fail -> ID chưa tồn tại -> dùng ID này
+    }
+  }
+
+  Serial.print("Using random ID: ");
+  Serial.println(id);
+
+  int p = -1;
+  Serial.println("Place your finger on the sensor...");
+
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_NOFINGER) continue;
+    if (p == FINGERPRINT_PACKETRECIEVEERR) {
+      Serial.println("Communication error, retrying...");
+      continue;
+    }
+    if (p == FINGERPRINT_IMAGEFAIL) {
+      Serial.println("Imaging error, retrying...");
+      continue;
+    }
+  }
+
+  p = finger.image2Tz(1);
+  if (p != FINGERPRINT_OK) {
+    Serial.println("Error processing first image.");
+    return;
+  }
+
+  Serial.println("Remove your finger...");
+  delay(2000);
+  while (finger.getImage() != FINGERPRINT_NOFINGER);
+
+  Serial.println("Place the same finger again...");
+
+  p = -1;
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_NOFINGER) continue;
+    if (p == FINGERPRINT_PACKETRECIEVEERR) continue;
+    if (p == FINGERPRINT_IMAGEFAIL) continue;
+  }
+
+  p = finger.image2Tz(2);
+  if (p != FINGERPRINT_OK) {
+    Serial.println("Error processing second image.");
+    return;
+  }
+
+  p = finger.createModel();
+  if (p != FINGERPRINT_OK) {
+    Serial.println("Failed to create fingerprint model.");
+    return;
+  }
+
+  p = finger.storeModel(id);
+  if (p == FINGERPRINT_OK) {
+    Serial.println("Fingerprint enrolled successfully!");
+    Serial.print("Stored at ID #"); Serial.println(id);
+  } else {
+    Serial.println("Failed to store fingerprint.");
+  }
+}
+void deleteFingerprint() {
+  Serial.println("\n=== Deleting Fingerprint ===");
+  Serial.println("Place your finger to delete...");
+  delay(2000);
+
+  // Chờ người dùng đặt tay
+  int id = getFingerprintIDez();
+  if (id < 0) {
+    Serial.println("Failed to detect finger.");
+    return;
+  }
+
+  Serial.print("Detected ID: ");
+  Serial.println(id);
+
+  // Xoá vân tay theo ID
+  uint8_t p = finger.deleteModel(id);
+  if (p == FINGERPRINT_OK) {
+    Serial.print("Deleted fingerprint ID #");
+    Serial.println(id);
+  } else {
+    Serial.print("Failed to delete fingerprint ID #");
+    Serial.println(id);
+  }
+}
+
+// Hàm phụ để lấy ID nhanh
+int getFingerprintIDez() {
+  uint8_t p = finger.getImage();
+  if (p != FINGERPRINT_OK) return -1;
+
+  p = finger.image2Tz();
+  if (p != FINGERPRINT_OK) return -1;
+
+  p = finger.fingerSearch();
+  if (p != FINGERPRINT_OK) return -2;
+
+  return finger.fingerID;
+}
