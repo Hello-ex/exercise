@@ -76,9 +76,11 @@ void checkRFID() {
     content.toUpperCase();
 
     if (content == allowedUID) {
-      Serial.println("DISPLAY Hello, ");  // Gửi lệnh mở cửa
+      Serial.println("ACTION UNLOCK");  // Gửi lệnh mở cửa
+      Serial.println("DISPLAY Hello, welcome home <3")
     } else {
-      Serial.println("DISPLAY Are you sure you own this house?");  // Gửi lệnh từ chối
+      Serial.println("ACTION DENY");  // Gửi từ chối
+      Serial.println("DISPLAY Are you sure you own this house?")
     }
     rfid.PICC_HaltA();
   }
@@ -88,7 +90,7 @@ void checkRFID() {
 void handleKeypad() {
   char key = keypad.getKey();
   if (key) {
-    Serial.print("DISPLAY Key Pressed: ");
+    Serial.print("Key Pressed: ");
     Serial.println(key);
 
     if (key == 'A') {
@@ -134,23 +136,23 @@ void checkFingerprint() {
 
   p = finger.fingerSearch();  // Tìm kiếm vân tay trong cơ sở dữ liệu
   if (p == FINGERPRINT_OK) {
-    Serial.println("UNLOCK");  // Nếu vân tay hợp lệ, mở cửa
+    Serial.println("ACTION UNLOCK");  // Nếu vân tay hợp lệ, mở cửa
   } else {
-    Serial.println("DENY");  // Nếu vân tay không hợp lệ, từ chối
+    Serial.println("ACTION DENY");  // Nếu vân tay không hợp lệ, từ chối
   }
 }
 
 void checkPassword() {
   if (inputPassword == storedPassword) {
-    Serial.println("DISPLAY ");  // Gửi lệnh mở cửa
+    Serial.println("ACTION UNLOCK");  // Gửi lệnh mở cửa
   } else {
-    Serial.println("DENY");  // Gửi lệnh từ chối
+    Serial.println("ACTION DENY");  // Gửi lệnh từ chối
   }
   inputPassword = "";  // Reset mật khẩu nhập
 }
 
 void changePassword() {
-  Serial.println("DISPLAY Enter new password:");
+  Serial.print("DISPLAY Enter new password:");
   String newPassword = "";
 
   unsigned long timeout = millis(); // thêm timeout nếu người dùng không bấm gì
@@ -176,7 +178,7 @@ void changePassword() {
 }
 
 void enrollFingerprint() {
-  Serial.println("\n=== Enrolling Fingerprint ===");
+  Serial.println("DISPLAY=== Enrolling Fingerprint ===");
 
   // Random ID trong khoảng 1-127
   uint8_t id;
@@ -190,28 +192,28 @@ void enrollFingerprint() {
     }
   }
 
-  Serial.print("Using random ID: ");
+  Serial.print("DISPLAY Using random ID: ");
   Serial.println(id);
 
   int p = -1;
-  Serial.println("Place your finger on the sensor...");
+  Serial.println("DISPLAY Place your finger on the sensor...");
 
   while (p != FINGERPRINT_OK) {
     p = finger.getImage();
     if (p == FINGERPRINT_NOFINGER) continue;
     if (p == FINGERPRINT_PACKETRECIEVEERR) {
-      Serial.println("Communication error, retrying...");
+      Serial.println("DISPLAY Communication error, retrying...");
       continue;
     }
     if (p == FINGERPRINT_IMAGEFAIL) {
-      Serial.println("Imaging error, retrying...");
+      Serial.println("DISPLAY Imaging error, retrying...");
       continue;
     }
   }
 
   p = finger.image2Tz(1);
   if (p != FINGERPRINT_OK) {
-    Serial.println("Error processing first image.");
+    Serial.println("DISPLAY Error processing first image.");
     return;
   }
 
@@ -219,7 +221,7 @@ void enrollFingerprint() {
   delay(2000);
   while (finger.getImage() != FINGERPRINT_NOFINGER);
 
-  Serial.println("Place the same finger again...");
+  Serial.println("DISPLAY Place the same finger again...");
 
   p = -1;
   while (p != FINGERPRINT_OK) {
@@ -231,46 +233,46 @@ void enrollFingerprint() {
 
   p = finger.image2Tz(2);
   if (p != FINGERPRINT_OK) {
-    Serial.println("Error processing second image.");
+    Serial.println("DISPLAY Error processing second image.");
     return;
   }
 
   p = finger.createModel();
   if (p != FINGERPRINT_OK) {
-    Serial.println("Failed to create fingerprint model.");
+    Serial.println("DISPLAY Failed to create fingerprint model.");
     return;
   }
 
   p = finger.storeModel(id);
   if (p == FINGERPRINT_OK) {
     Serial.println("Fingerprint enrolled successfully!");
-    Serial.print("Stored at ID #"); Serial.println(id);
+    Serial.print("DISPLAY Stored at ID #"); Serial.println(id);
   } else {
-    Serial.println("Failed to store fingerprint.");
+    Serial.println("DISPLAY Failed to store fingerprint.");
   }
 }
 void deleteFingerprint() {
-  Serial.println("\n=== Deleting Fingerprint ===");
-  Serial.println("Place your finger to delete...");
+  Serial.println("DISPLAY === Deleting Fingerprint ===");
+  Serial.println("DISPLAY Place your finger to delete...");
   delay(2000);
 
   // Chờ người dùng đặt tay
   int id = getFingerprintIDez();
   if (id < 0) {
-    Serial.println("Failed to detect finger.");
+    Serial.println("DISPLAY Failed to detect finger.");
     return;
   }
 
-  Serial.print("Detected ID: ");
+  Serial.print("DISPLAY Detected ID: ");
   Serial.println(id);
 
   // Xoá vân tay theo ID
   uint8_t p = finger.deleteModel(id);
   if (p == FINGERPRINT_OK) {
-    Serial.print("Deleted fingerprint ID #");
+    Serial.print("DISPLAY Deleted fingerprint ID #");
     Serial.println(id);
   } else {
-    Serial.print("Failed to delete fingerprint ID #");
+    Serial.print("DISPLAY Failed to delete fingerprint ID #");
     Serial.println(id);
   }
 }
