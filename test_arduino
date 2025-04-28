@@ -31,23 +31,19 @@ void loop() {
 
     if (command.startsWith("DISPLAY")) {
       payload = command.substring(8); // Bỏ "DISPLAY " để lấy nội dung in
-      displayMessage(payload);
-      
-      // Xử lý các hành động theo nội dung (nếu cần)
-      if (payload == "Access Granted") {
+      displayMessage(payload);  // In ra LCD
+    }
+    else if (command.startsWith("ACTION")) {
+      String action = command.substring(7);
+      if (action == "UNLOCK") {
         buzzShort();
         unlockDoor();
-        delay(5000);
+        delay(5000); // Mở cửa trong 5 giây
         lockDoor();
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("Hello, welcome home <3");
-      } else if (payload == "Access Denied") {
+      } 
+      else if (action == "DENY") {
         buzzLong();
         delay(1000);
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("Hello, welcome home <3");
       }
     }
   }
