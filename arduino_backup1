@@ -1,0 +1,128 @@
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+
+#define BUZZER_PIN 9
+#define SERVO_PIN 6
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+Servo myServo;
+
+String command = "";
+String currentMessage = "";
+bool needScroll = false;
+
+// Cuộn chữ
+unsigned long lastScrollTime = 0;
+int scrollIndex = 0;
+
+// Trạng thái mở cửa không delay
+bool doorUnlocked = false;
+unsigned long unlockTime = 0;
+const unsigned long unlockDuration = 5000;
+
+void setup() {
+  Serial.begin(9600);
+  lcd.init();
+  lcd.backlight();
+
+  pinMode(BUZZER_PIN, OUTPUT);
+  myServo.attach(SERVO_PIN);
+
+  lockDoor();
+  lcd.setCursor(0, 0);
+  lcd.print("Smart Lock");
+}
+
+void loop() {
+  if (Serial.available()) {
+    command = Serial.readStringUntil('\n');
+    command.trim();
+
+    handleCommand(command);
+  }
+
+  if (needScroll) {
+    scrollMessage(currentMessage);
+  }
+
+  // Kiểm tra hết thời gian mở cửa thì khóa lại
+  if (doorUnlocked && millis() - unlockTime >= unlockDuration) {
+    lockDoor();
+    doorUnlocked = false;
+  }
+}
+
+// Xử lý lệnh từ ESP8266
+void handleCommand(String cmd) {
+  if (cmd.startsWith("DISPLAY ")) {
+    currentMessage = cmd.substring(8);
+    needScroll = (currentMessage.length() > 16);
+    displayMessage(currentMessage);
+  }
+  else if (cmd.startsWith("ACTION ")) {
+    String action = cmd.substring(7);
+    if (action == "UNLOCK") {
+      buzzShort();
+      unlockDoor();
+      unlockTime = millis();
+      doorUnlocked = true;
+    } 
+    else if (action == "DENY") {
+      buzzLong();
+    }
+  }
+}
+
+// Hiển thị tin nhắn ban đầu
+void displayMessage(String msg) {
+  lcd.clear();
+  if (msg.length() <= 16) {
+    lcd.setCursor(0, 0);
+    lcd.print(msg);
+    needScroll = false;
+  } else {
+    lcd.setCursor(0, 0);
+    lcd.print(msg.substring(0, 16));
+    scrollIndex = 0;
+    lastScrollTime = millis();
+    needScroll = true;
+  }
+}
+
+
+// Cuộn chữ
+void scrollMessage(String msg) {
+  if (millis() - lastScrollTime > 300) {
+    String scrollText = msg + "    ";
+    scrollIndex++;
+    if (scrollIndex > scrollText.length() - 16) {
+      scrollIndex = 0;
+    }
+    lcd.setCursor(0, 0);
+    lcd.print(scrollText.substring(scrollIndex, scrollIndex + 16));
+    lastScrollTime = millis();
+  }
+}
+
+// Âm thanh buzzer
+void buzzShort() {
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(100);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+void buzzLong() {
+  digitalWrite(BUZZER_PIN, HIGH);
+  delay(500);
+  digitalWrite(BUZZER_PIN, LOW);
+}
+
+// Điều khiển servo
+void lockDoor() {
+  myServo.write(0);  // Khóa
+}
+
+void unlockDoor() {
+  myServo.write(90); // Mở khóa
+}
