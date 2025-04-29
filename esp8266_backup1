@@ -95,11 +95,11 @@ void checkRFID() {
     content.toUpperCase();
 
     if (content == allowedUID) {
-      sendDisplay("Hi, welcome home <3");
       Serial.println("ACTION UNLOCK");
+      sendDisplay("Welcome home <3");
     } else {
       Serial.println("ACTION DENY");
-      sendDisplay("Are you sure you own this house?");
+      sendDisplay("Access denied!");
     }
     rfid.PICC_HaltA();
   }
@@ -174,20 +174,20 @@ void checkFingerprint() {
   p = finger.fingerSearch();
   if (p == FINGERPRINT_OK) {
     Serial.println("ACTION UNLOCK");
-    sendDisplay("Hi, welcome home <3");
+    sendDisplay("Welcome home <3");
   } else {
     Serial.println("ACTION DENY");
-    sendDisplay("Are you sure you own this house?");
+    sendDisplay("Access denied!");
   }
 }
 
 void checkPassword() {
   if (inputPassword == storedPassword) {
     Serial.println("ACTION UNLOCK");
-    sendDisplay("Hi, welcome home <3");
+    sendDisplay("Welcome home <3");
   } else {
     Serial.println("ACTION DENY");
-    sendDisplay("Are you sure you own this house?");
+    sendDisplay("Access denied!");
   }
   inputPassword = "";
 }
