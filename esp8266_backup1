@@ -5,19 +5,20 @@
 #include <PCF8574.h>
 #include <SoftwareSerial.h>
 #include <Adafruit_Fingerprint.h>
+#include <EEPROM.h>
 
 #define SS_PIN D8
 #define RST_PIN D0
-#define I2C_ADDR 0x20  // Địa chỉ I2C của PCF8574
+#define I2C_ADDR 0x20
 
-#define myRX D4   // TX của AS608 nối vào D4
-#define myTX D3   // RX của AS608 nối vào D3
+#define myRX D4
+#define myTX D3
 
-SoftwareSerial mySerial(myRX, myTX);  
+SoftwareSerial mySerial(myRX, myTX);
 Adafruit_Fingerprint finger(&mySerial);
 
 // Keypad 4x4
-const byte ROW_NUM    = 4;
+const byte ROW_NUM = 4;
 const byte COLUMN_NUM = 4;
 char keys[ROW_NUM][COLUMN_NUM] = {
   {'1','2','3','A'},
@@ -25,25 +26,32 @@ char keys[ROW_NUM][COLUMN_NUM] = {
   {'7','8','9','C'},
   {'*','0','#','D'}
 };
-byte pin_rows[ROW_NUM] = {0, 1, 2, 3}; 
-byte pin_column[COLUMN_NUM] = {4, 5, 6, 7}; 
+byte pin_rows[ROW_NUM] = {0, 1, 2, 3};
+byte pin_column[COLUMN_NUM] = {4, 5, 6, 7};
 
 Keypad_I2C keypad(makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_NUM, I2C_ADDR);
-
 MFRC522 rfid(SS_PIN, RST_PIN);
 
-String allowedUID = "AC C9 37 02"; 
+String allowedUID = "AC C9 37 02";
 String inputPassword = "";
-String storedPassword = "1234";  
-int starPressCount = 0;  
+String storedPassword = "";
+int starPressCount = 0;
 
 void setup() {
   Serial.begin(9600);
-  Wire.begin(D2, D1);  // đúng thứ tự I2C
+  Wire.begin(D2, D1);
   SPI.begin();
   rfid.PCD_Init();
   keypad.begin();
   finger.begin(57600);
+  EEPROM.begin(512);  // <-- bắt buộc với ESP8266
+
+  storedPassword = readPasswordFromEEPROM();
+  if (storedPassword.length() == 0 || storedPassword.length() > 10) {
+    storedPassword = "1234";
+    savePasswordToEEPROM(storedPassword);
+  }
+
   delay(200);
 }
 
@@ -53,8 +61,28 @@ void loop() {
   handleKeypad();
 }
 
-// Các hàm:
+// EEPROM SAVE/LOAD PASSWORD
+void savePasswordToEEPROM(String pwd) {
+  EEPROM.write(0, pwd.length());
+  for (int i = 0; i < pwd.length(); i++) {
+    EEPROM.write(i + 1, pwd[i]);
+  }
+  EEPROM.commit();
+}
 
+String readPasswordFromEEPROM() {
+  int len = EEPROM.read(0);
+  if (len <= 0 || len > 20) return "";
+
+  String pwd = "";
+  for (int i = 0; i < len; i++) {
+    char ch = EEPROM.read(i + 1);
+    if (isPrintable(ch)) pwd += ch;
+  }
+  return pwd;
+}
+
+// ==== AUTH LOGIC ====
 void checkRFID() {
   if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
     String content = "";
@@ -69,7 +97,6 @@ void checkRFID() {
     if (content == allowedUID) {
       sendDisplay("Hi, welcome home <3");
       Serial.println("ACTION UNLOCK");
-      
     } else {
       Serial.println("ACTION DENY");
       sendDisplay("Are you sure you own this house?");
@@ -107,9 +134,6 @@ void processKeypadInput(char key) {
   }
   else if (key == 'D') {
     starPressCount++;
-    sendDisplay("Press count: ");
-    Serial.println(starPressCount);
-
     if (starPressCount == 3) {
       if (requireRFIDAuth()) {
         enrollFingerprint();
@@ -119,9 +143,6 @@ void processKeypadInput(char key) {
   }
   else if (key == 'B') {
     starPressCount++;
-    sendDisplay("Press count: ");
-    Serial.println(starPressCount);
-
     if (starPressCount == 3) {
       if (requireRFIDAuth()) {
         deleteFingerprint();
@@ -131,7 +152,7 @@ void processKeypadInput(char key) {
   }
   else {
     inputPassword += key;
-    showPasswordMasked(inputPassword.length()); // <-- Hiển thị dấu '*'
+    showPasswordMasked(inputPassword.length());
   }
 }
 
@@ -142,7 +163,6 @@ void showPasswordMasked(int length) {
   }
   sendDisplay(masked);
 }
-
 
 void checkFingerprint() {
   uint8_t p = finger.getImage();
@@ -181,10 +201,8 @@ void changePassword() {
     char key = keypad.getKey();
     if (key) {
       newPassword += key;
-      Serial.print(key);
       timeout = millis();
-
-      sendDisplay(newPassword);  // Hiển thị mật khẩu mới ngay khi nhấn phím
+      sendDisplay(newPassword);
     }
 
     yield();
@@ -195,8 +213,9 @@ void changePassword() {
     }
   }
 
-  sendDisplay("New password set.");
   storedPassword = newPassword;
+  savePasswordToEEPROM(storedPassword);
+  sendDisplay("New password set.");
   starPressCount = 0;
 }
 
@@ -212,7 +231,7 @@ void enrollFingerprint() {
     }
   }
 
-  sendDisplay("Using random ID:" +String(id));
+  sendDisplay("Using random ID:" + String(id));
   Serial.println(id);
 
   int p = -1;
@@ -221,14 +240,8 @@ void enrollFingerprint() {
   while (p != FINGERPRINT_OK) {
     p = finger.getImage();
     if (p == FINGERPRINT_NOFINGER) continue;
-    if (p == FINGERPRINT_PACKETRECIEVEERR) {
-      Serial.println("DISPLAY Communication error, retrying...");
-      continue;
-    }
-    if (p == FINGERPRINT_IMAGEFAIL) {
-      sendDisplay("Imaging error, retrying...");
-      continue;
-    }
+    if (p == FINGERPRINT_PACKETRECIEVEERR) continue;
+    if (p == FINGERPRINT_IMAGEFAIL) continue;
     yield();
   }
 
@@ -269,8 +282,7 @@ void enrollFingerprint() {
   p = finger.storeModel(id);
   if (p == FINGERPRINT_OK) {
     sendDisplay("Fingerprint enrolled successfully!");
-    sendDisplay("Stored at ID #");
-    Serial.println(id);
+    Serial.println("Stored at ID #" + String(id));
   } else {
     sendDisplay("Failed to store fingerprint.");
   }
@@ -287,16 +299,11 @@ void deleteFingerprint() {
     return;
   }
 
-  sendDisplay("Detected ID:");
-  Serial.println(id);
-
   uint8_t p = finger.deleteModel(id);
   if (p == FINGERPRINT_OK) {
-    sendDisplay("Deleted fingerprint ID #");
-    Serial.println(id);
+    sendDisplay("Deleted fingerprint ID #" + String(id));
   } else {
-    sendDisplay("Failed to delete fingerprint ID #");
-    Serial.println(id);
+    sendDisplay("Failed to delete fingerprint ID #" + String(id));
   }
 }
 
@@ -345,7 +352,5 @@ bool requireRFIDAuth() {
 
 void sendDisplay(String msg) {
   Serial.print("DISPLAY ");
-  Serial.print(msg);
-  Serial.print("\n");
+  Serial.println(msg);
 }
-
